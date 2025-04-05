@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacer Pedido</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Hacer un Pedido</h1>
+
+        <!-- Seleccionar Cliente -->
+        <label for="client">Selecciona tu nombre:</label>
+        <select id="client">
+            <option value="">Cargando clientes...</option>
+        </select>
+
+        <!-- Lista de productos -->
+        <h2>Selecciona productos</h2>
+        <div id="products-container"></div>
+
+        <!-- Botón para hacer pedido -->
+        <button id="submit-order">Realizar Pedido</button>
+
+        <p id="message"></p>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
