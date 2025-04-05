@@ -51,8 +51,8 @@ app.get('/clients', (req, res) => {
 
 // Crear un nuevo cliente
 app.post('/clients', (req, res) => {
-    const { name, phone } = req.body;
-    db.query("INSERT INTO Clients (name, phone) VALUES (?, ?)", [name, phone], (err, results) => {
+    const { id, name, phone } = req.body;
+    db.query("INSERT INTO Clients (name, phone) VALUES (?, ?, ?)", [id, name, phone], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ id: results.insertId, name, phone });
     });
@@ -70,8 +70,8 @@ app.get('/products', (req, res) => {
 
 // Crear un nuevo producto
 app.post('/products', (req, res) => {
-    const { name, price, unit } = req.body;
-    db.query("INSERT INTO Products (name, price, unit) VALUES (?, ?, ?)", [name, price, unit], (err, results) => {
+    const { id, name, price, unit } = req.body;
+    db.query("INSERT INTO Products (name, price, unit) VALUES (?, ?, ?, ?)", [id, name, price, unit], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ id: results.insertId, name, price, unit });
     });
