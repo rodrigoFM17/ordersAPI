@@ -36,7 +36,7 @@ function loadProducts() {
 
                 productDiv.innerHTML = `
                     <span>${product.name} - $${product.price}</span>
-                    <input type="number" id="product-${product.id}" min="0" value="0">
+                    <input type="number" id="${product.id}|${product.price}" min="0" value="0">
                 `;
                 container.appendChild(productDiv);
             });
@@ -52,16 +52,20 @@ document.getElementById("submit-order").addEventListener("click", () => {
         return;
     }
 
-    const productInputs = document.querySelectorAll("[id^='product-']");
+    const productInputs = document.querySelectorAll("input[type='number']");
     const products = [];
     let total = 0;
 
+    console.log(productInputs)
+
     productInputs.forEach(input => {
-        const productId = input.id.split("-")[1];
+        const [productId, price] = input.id.split("|")
+        
         const quantity = parseInt(input.value);
         if (quantity > 0) {
-            products.push({ product_id: parseInt(productId), quantity });
-            total += quantity * parseFloat(input.dataset.price);
+            products.push({ product_id: productId, quantity });
+            console.log(input)
+            total += quantity * parseFloat(price);
         }
     });
 
@@ -71,10 +75,9 @@ document.getElementById("submit-order").addEventListener("click", () => {
     }
 
     const order = {
-        client_id: parseInt(clientId),
+        client_id: clientId,
         total,
         date: Date.now(),
-        completed: false,
         products
     };
 

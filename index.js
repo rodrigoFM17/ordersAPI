@@ -6,7 +6,7 @@ const bodyParser = require('body-parser');
 const admin = require('firebase-admin');
 
 // Inicializar Firebase
-const serviceAccount = require("./firebaseServiceAccount.json");
+const serviceAccount = require("./firebase/appcorte3-53239-firebase-adminsdk-fbsvc-a12fd4f61a.json");
 const { randomUUID } = require('node:crypto');
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -44,7 +44,9 @@ db.getConnection((err, connection) => {
 // Obtener todos los clientes
 app.get('/clients', (req, res) => {
     db.query("SELECT * FROM Clients", (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
         res.json(results);
     });
 });
@@ -52,7 +54,7 @@ app.get('/clients', (req, res) => {
 // Crear un nuevo cliente
 app.post('/clients', (req, res) => {
     const { id, name, phone } = req.body;
-    db.query("INSERT INTO Clients (name, phone) VALUES (?, ?, ?)", [id, name, phone], (err, results) => {
+    db.query("INSERT INTO Clients (id, name, phone) VALUES (?, ?, ?)", [id, name, phone], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ id: results.insertId, name, phone });
     });
@@ -71,7 +73,7 @@ app.get('/products', (req, res) => {
 // Crear un nuevo producto
 app.post('/products', (req, res) => {
     const { id, name, price, unit } = req.body;
-    db.query("INSERT INTO Products (name, price, unit) VALUES (?, ?, ?, ?)", [id, name, price, unit], (err, results) => {
+    db.query("INSERT INTO Products (id, name, price, unit) VALUES (?, ?, ?, ?)", [id, name, price, unit], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ id: results.insertId, name, price, unit });
     });
@@ -89,6 +91,38 @@ app.get('/orders', (req, res) => {
 
 // Crear un nuevo pedido
 app.post('/orders', (req, res) => {
+    const { client_id, total, date, products } = req.body;
+    const orderId = randomUUID()
+    db.query("INSERT INTO Orders (id, client_id, total, date, completed, sended) VALUES (?, ?, ?, ?, ?, ?)", 
+        [orderId, client_id, total, date, 0, 0], (err, results) => {
+        
+        if (err) return res.status(500).json({ error: err.message });
+
+
+        const productValues = products.map(p => [randomUUID(), orderId, p.product_id, p.quantity, 0]);
+        db.query("INSERT INTO OrderProducts (id, order_id, product_id, quantity, sended) VALUES ?", [productValues], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // Notificar a Firebase que se ha creado un nuevo pedido
+            const payload = {
+                notification: {
+                    title: "Nuevo Pedido",
+                    body: `Se ha creado un nuevo pedido con ID ${orderId}`
+                },
+                topic: "new_orders"
+            };
+
+            console.log(admin)
+            admin.messaging().send(payload)
+                .then(() => console.log("Notificación enviada"))
+                .catch(error => console.error("Error enviando notificación:", error));
+
+            res.json({ orderId, message: "Pedido creado exitosamente" });
+        });
+    });
+});
+
+app.post('/orders-products', (req, res) => {
     const { client_id, total, date, completed, products } = req.body;
     
     db.query("INSERT INTO Orders (id, client_id, total, date, completed) VALUES (?, ?, ?, ?, ?)", 
@@ -109,10 +143,10 @@ app.post('/orders', (req, res) => {
                     body: `Se ha creado un nuevo pedido con ID ${orderId}`
                 }
             };
-
-            admin.messaging().sendToTopic("new_orders", payload)
-                .then(() => console.log("Notificación enviada"))
-                .catch(error => console.error("Error enviando notificación:", error));
+            
+            // admin.messaging().sendToTopic("new_orders", payload)
+            //     .then(() => console.log("Notificación enviada"))
+            //     .catch(error => console.error("Error enviando notificación:", error));
 
             res.json({ orderId, message: "Pedido creado exitosamente" });
         });
@@ -123,7 +157,7 @@ app.post('/orders', (req, res) => {
 
 // Obtener clientes no descargados
 app.get('/sync/clients', (req, res) => {
-    db.query("SELECT * FROM Clients WHERE downloaded = FALSE", (err, results) => {
+    db.query("SELECT * FROM Clients WHERE sended = FALSE", (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
     });
@@ -132,7 +166,7 @@ app.get('/sync/clients', (req, res) => {
 // Marcar clientes como descargados
 app.put('/sync/clients/downloaded', (req, res) => {
     const { clientIds } = req.body;
-    db.query("UPDATE Clients SET downloaded = TRUE WHERE id IN (?)", [clientIds], (err) => {
+    db.query("UPDATE Clients SET sended = TRUE WHERE id IN (?)", [clientIds], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Clientes marcados como descargados" });
     });
@@ -140,83 +174,79 @@ app.put('/sync/clients/downloaded', (req, res) => {
 
 // Obtener productos no descargados
 app.get('/sync/products', (req, res) => {
-    db.query("SELECT * FROM Products WHERE downloaded = FALSE", (err, results) => {
+    db.query("SELECT * FROM Products WHERE sended = FALSE", (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
     });
 });
 
 // Marcar productos como descargados
-app.put('/sync/products/downloaded', (req, res) => {
-    const { productIds } = req.body;
-    db.query("UPDATE Products SET downloaded = TRUE WHERE id IN (?)", [productIds], (err) => {
+app.put('/sync/products/:id', (req, res) => {
+    const { id } = req.params;
+    db.query("UPDATE Products SET sended = TRUE WHERE id = (?)", [id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Productos marcados como descargados" });
     });
 });
 
-// Obtener pedidos no descargados
-app.get('/sync/orders', (req, res) => {
-    db.query("SELECT * FROM Orders WHERE downloaded = FALSE", (err, results) => {
+app.post('/sync/orders', (req, res) => {
+    const {id, client_id, total, date, completed} = req.body
+    db.query("INSERT INTO Orders (id, client_id, total, date, completed, sended) values (?, ?, ?, ?, ?, ?)", [id, client_id, total, date, completed, true], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
     });
 });
 
-app.post("/sync/order-products/upload", async (req, res) => {
-    const {order_products} = req.body
-    const db = await mysql.createConnection(dbConfig);
+// Obtener pedidos no descargados
+app.get('/sync/orders', (req, res) => {
+    db.query("SELECT * FROM Orders WHERE sended = 0", (err, results) => {
 
-    for (const product of products) {
-        await db.query(
-            "INSERT INTO OrderProducts (order_id, product_id, quantity, sended) VALUES (?, ?, ?, ?)",
-            [id, product.product_id, product.quantity, true, product.quantity, true]
-        );
-    }
-
-    res.json({ message: "Pedido sincronizado correctamente" });
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
 });
 
-app.put("/sync/order-products/downloaded", async(req, res) => {
-    const { order_products_ids } = req.body
-
-    const query = "UPDATE orderproducts SET downloaded = TRUE where id IN (?)  "
-
-    await db.query(query, [order_products_ids])
-})
-
 // Marcar pedidos como descargados
-app.put('/sync/orders/downloaded', (req, res) => {
-    const { orderIds } = req.body;
-    db.query("UPDATE Orders SET downloaded = TRUE WHERE id IN (?)", [orderIds], (err) => {
+app.put('/sync/orders/:id', (req, res) => {
+    const { id } = req.params;
+    db.query("UPDATE Orders SET sended = 1 WHERE id = (?)", [id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Pedidos marcados como descargados" });
     });
 });
 
-// Subir clientes desde la app a la base de datos remota
-app.post('/sync/clients/upload', (req, res) => {
-    const { clients } = req.body;
-    
-    const clientValues = clients.map(c => [c.name, c.phone]);
-    db.query("INSERT INTO Clients (name, phone) VALUES ?", [clientValues], (err, results) => {
+app.get('/sync/order-products/', (req, res) => {
+    const {id} = req.params
+    db.query("SELECT * FROM OrderProducts WHERE sended = 0", (err, results) => {
+
         if (err) return res.status(500).json({ error: err.message });
-        
-        res.json({ message: "Clientes subidos exitosamente" });
+        res.json(results);
     });
 });
 
-// Subir productos desde la app a la base de datos remota
-app.post('/sync/products/upload', (req, res) => {
-    const { products } = req.body;
-    
-    const productValues = products.map(p => [p.name, p.price, p.unit]);
-    db.query("INSERT INTO Products (name, price, unit) VALUES ?", [productValues], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        res.json({ message: "Productos subidos exitosamente" });
-    });
+app.post("/sync/order-products", async (req, res) => {
+    const {id, order_id, product_id, quantity} = req.body
+
+    await db.query(
+        "INSERT INTO OrderProducts (id, order_id, product_id, quantity, sended) VALUES (?, ?, ?, ?, ?)",
+        [id, order_id, product_id, quantity, true]
+    );
+
+
+    res.json({ message: "Pedido subido correctamente" });
 });
+
+app.put("/sync/order-products/:id", async(req, res) => {
+    const { id } = req.params
+
+    const query = "UPDATE OrderProducts SET sended = TRUE where id = ?  "
+
+    await db.query(query, [id])
+
+    res.json({ message: "Pedido sincronizado correctamente" });
+
+})
+
 
 // ------------------- SERVIDOR -------------------
 app.listen(PORT, () => {
